@@ -13,24 +13,27 @@ warnings.simplefilter(action='ignore', category=InterpolationWarning)
 
 
 class AutoStationary:
-    """
-    Toolkit to easily transform and inverse_transform a time-series to a stationary version and back.
+    """Transform and inverse_transform a time-series to a stationary version and back.
+
     Uses boxcox transform and differencing.  Sensible parameters are automatically determined and applied
     with respect to the provided input parameters.
 
     The inverse_transform() is especially practical for cases in which you have a forecasting model which
-    takes transformed data as input.  The output of the model in this case will also be
-    in a transformed state, so you need to first inverse_transform() it before you can make sense of
-    your forecast.
+    takes transformed data as input.  The output of the model in this case will also be in a transformed
+    state, so you need to first inverse_transform() it before you can make sense of your forecast.
     """
 
-    def __init__(self, arr, enabled=True, warnings_enabled=True, critical_value='5%'):
-        """input: 1D array or a Pandas Series
-           enabled:  If False, temporarily disable all data manipulation.  This can be useful when you
-                     want to check the behavior of your code on the original, non-stationarized data.
-           critical_value              Required confidence for the ADF and KPSS stationarity tests.
-                                       String.  '1%', 5%' (default) or '10%'.
+    def __init__(self, arr, enabled=True, verbose=True, critical_value='5%'):
         """
+        :param arr:             1-dimensional numpy array or pandas Series
+        :param enabled:         bool.  If False, temporarily disables all data manipulation.  This can be
+                                useful when you want to check the behavior of your code on the original,
+                                unmodified data.
+        :param verbose:         bool.
+        :param critical_value:  str.  Required confidence for the ADF and KPSS stationarity tests.
+                                Allowed values: ['1%', 5%', '10%'].  Default: '5%'
+        """
+
         if critical_value not in ['1%', '5%', '10%']:
             raise ValueError(f"critical value must be in ['1%', '5%', '10%']")
 
@@ -52,9 +55,17 @@ class AutoStationary:
         self._transformed = False
         self.stationary = None
         self.critical_value = critical_value
-        self.warnings_enabled = warnings_enabled
+        self.warnings_enabled = verbose
 
     def is_stationary_ADF(self, arr, return_result=False):
+        """Returns whether the array is stationary according to the ADF test.
+
+        ADF = Augmented Dickey Fuller Test.
+
+        :param arr:             1-dimensional numpy array or pandas Series
+        :param return_result:   bool: if False, returns a bool.  if True, returns a (bool, dict) tuple.
+        :return:                bool or tuple, depending on the `return_result` parameter.
+        """
         result = adfuller(arr, autolag='AIC')
         teststat = result[0]
         criticv = result[4][self.critical_value]
@@ -70,6 +81,14 @@ class AutoStationary:
                 return False, result
 
     def is_stationary_KPSS(self, arr, return_result=False):
+        """Returns whether the array is stationary according to the KPSS test.
+
+        KPSS = Kwiatkowski–Phillips–Schmidt–Shin Test.
+
+        :param arr:             1-dimensional numpy array or pandas Series
+        :param return_result:   bool: if False, returns a bool.  if True, returns a (bool, dict) tuple.
+        :return:                bool or tuple, depending on the `return_result` parameter.
+        """
         result = kpss(arr, regression='c')
         teststat = result[0]
         criticv = result[3][self.critical_value]
@@ -85,7 +104,12 @@ class AutoStationary:
                 return False, result
 
     def is_stationary(self, arr):
-        """Returns whether the arr is stationary according to ADF and KPSS.  If one of the two tests fail, returns False"""
+        """Returns whether the array is stationary according to both ADF and KPSS.
+
+        :param arr:             1-dimensional numpy array or pandas Series
+        :return:                bool
+        """
+
         res_adf = self.is_stationary_ADF(arr)
         res_kpss = self.is_stationary_KPSS(arr)
         if res_adf and res_kpss:
@@ -96,25 +120,29 @@ class AutoStationary:
             return False
 
     def transform(self, boxcox_transform=True, diff_orders='auto', enforce_stationarity=True):
-        """
-        If the array is not stationary, returns a stationary version of the array.
-        Used techniques are Boxcox transform and differencing.
-        Both ADF and KPSS tests have to be passed before we consider the array stationary.
+        """Returns a stationary version of the array.
 
-        boxcox_transformation       Deal with unstable variance by transforming the array before applying differencing.
-                                    True, False, or float.
-                                    Set to False to disable.
-                                    Set to 0.0 to do a log transform.
-                                    Set to True to automatically determine the optimal value.
+        Used techniques are Boxcox transform and differencing of the n-th order.
+        Both ADF and KPSS stationary tests have to pass before we consider the array stationary.
 
-        diff_orders                 int:  difference the series by the specified order
-                                    list of ints: try all orders specified in the list
-                                    'auto': (default)  uses np.arange(1, 25)
+        :param boxcox_transform:        Deal with unstable variance by transforming the array before
+                                        applying differencing.  True, False, or float.
+                                            Set to False to disable boxcox transformation.
+                                            Set to 0.0 to do a log transform.
+                                            Set to True to automatically determine the optimal (float) value.
 
-        enforce_stationarity        If the array can't be transformed to stationary, throws an error if set to True.
-                                    If set to False, will return the array with diff_orders[0] differencing.
-                                    Note that if this setting is disabled and you have disabled warning messages as well,
-                                    the function may return non-stationary array without alerting you.
+        :param diff_orders:             Determines the maximum order of differencing.
+                                            int:                difference the series by the specified order
+                                            list of ints:       try all orders specified in the list
+                                            'auto' (default):   uses np.arange(1, 25)
+
+        :param enforce_stationarity:    If True, raise an Exception if we fail to make array stationary.
+                                        If False, instead of an Exception, the array will return with
+                                        diff_orders[0] differencing.
+                                        Note: if False, and verbose is also False, you may be returned
+                                        a non-stationary array as output without being aware of it!
+
+        :return:                        Stationary version of the array (For edge cases read above).
         """
 
         # input validation
