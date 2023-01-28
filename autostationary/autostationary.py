@@ -14,8 +14,14 @@ warnings.simplefilter(action='ignore', category=InterpolationWarning)
 
 class AutoStationary:
     """
-    Toolkit to easily transform and inverse_transform a series to a stationary version and back.
-    Uses transforming and differencing.  Automatically determines sensible parameters.
+    Toolkit to easily transform and inverse_transform a time-series to a stationary version and back.
+    Uses boxcox transform and differencing.  Sensible parameters are automatically determined and applied
+    with respect to the provided input parameters.
+
+    The inverse_transform() is especially practical for cases in which you have a forecasting model which
+    takes transformed data as input.  The output of the model in this case will also be
+    in a transformed state, so you need to first inverse_transform() it before you can make sense of
+    your forecast.
     """
 
     def __init__(self, arr, enabled=True, warnings_enabled=True, critical_value='5%'):
