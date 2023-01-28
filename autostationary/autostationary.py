@@ -18,13 +18,13 @@ class AutoStationary:
     Uses transforming and differencing.  Automatically determines sensible parameters.
     """
 
-    def __init__(self, data, do_nothing=False, warnings_enabled=True):
+    def __init__(self, data, enabled=True, warnings_enabled=True):
         """input: 1D array or a Pandas Series
-           do_nothing:  Can be used to temporarily disable all data manipulation.  This can be useful when you
-                        want to check the behavior of your code on the original, non-stationarized data.
+           enabled:  If False, temporarily disable all data manipulation.  This can be useful when you
+                     want to check the behavior of your code on the original, non-stationarized data.
         """
 
-        if not do_nothing:
+        if enabled:
             if not isinstance(data, pd.Series):
                 # create series with a dummy datetimeindex
                 data = pd.Series(data, index=pd.date_range(start=0, freq='1d', periods=len(data)))
@@ -32,7 +32,7 @@ class AutoStationary:
             else:
                 self._input_was_array = False
 
-        self._do_nothing = do_nothing
+        self._enabled = enabled
         self._data = data
         self._data_index = data.index
         self._tdata = None
@@ -44,6 +44,7 @@ class AutoStationary:
         self._adf_result = None
         self._kpss_result = None
         self.warnings_enabled = warnings_enabled
+        self.stationary = None
 
     def _is_stationary_ADF(self, data, critical_value='5%'):
         assert (critical_value in ['1%', '5%', '10%'])
@@ -115,7 +116,7 @@ class AutoStationary:
             raise ValueError('Data already transformed!', UserWarning)
 
         # do nothing
-        if self._do_nothing:
+        if not self._enabled:
             return self._data
 
         # if already stationary, do nothing
@@ -176,7 +177,7 @@ class AutoStationary:
                 return datadiff
 
     def inverse_transform(self, diffdata):
-        if self._do_nothing:
+        if not self._enabled:
             return diffdata
 
         if isinstance(diffdata, pd.Series):
@@ -232,18 +233,19 @@ class AutoStationary:
 
     def summary(self):
         """returns a summary after calling transform()"""
-        if not self._do_nothing:
-            return ({
-                'transformed': self._transformed,
-                'stationary': self._stationary,
-                'diff_order': self._diff_order,
-                'boxcox_lambda': self._boxcox_lambda,
-                'boxcox_shift': self._boxcox_shift,
-                'adf_result': pd.Series(self._adf_result[:5], index=['test_statistic', 'p', 'n_lags', 'n_obs', 'critical_value']).to_dict(),
-                'kpss_result': pd.Series(self._kpss_result[:4], index=['test statistic', 'p', 'n_lags', 'critical_value']).to_dict()
-            })
+
+        if not self._enabled:
+            return {'warning': 'data was not transformed in any way cause user set enabled.'}
         else:
-            return {'warning': 'data was not transformed in any way cause user set do_nothing.'}
+            return ({'transformed': self._transformed,
+                    'stationary': self._stationary,
+                    'diff_order': self._diff_order,
+                    'boxcox_lambda': self._boxcox_lambda,
+                    'boxcox_shift': self._boxcox_shift,
+                    'adf_result': pd.Series(self._adf_result[:5], index=['test_statistic', 'p', 'n_lags', 'n_obs', 'critical_value']).to_dict(),
+                    'kpss_result': pd.Series(self._kpss_result[:4], index=['test statistic', 'p', 'n_lags', 'critical_value']).to_dict()
+                    })
+
 
 
 if __name__ == '__main__':
