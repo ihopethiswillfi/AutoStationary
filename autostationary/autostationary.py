@@ -18,11 +18,15 @@ class AutoStationary:
     Uses transforming and differencing.  Automatically determines sensible parameters.
     """
 
-    def __init__(self, data, enabled=True, warnings_enabled=True):
+    def __init__(self, data, enabled=True, warnings_enabled=True, critical_value='5%'):
         """input: 1D array or a Pandas Series
            enabled:  If False, temporarily disable all data manipulation.  This can be useful when you
                      want to check the behavior of your code on the original, non-stationarized data.
+           critical_value              Required confidence for the ADF and KPSS stationarity tests.
+                                       String.  '1%', 5%' (default) or '10%'.
         """
+        if critical_value not in ['1%', '5%', '10%']:
+            raise ValueError(f"critical value must be in ['1%', '5%', '10%']")
 
         if enabled:
             if not isinstance(data, pd.Series):
@@ -41,38 +45,35 @@ class AutoStationary:
         self._boxcox_shift = 0
         self._stationary = None
         self._transformed = False
-        self._adf_result = None
         self._kpss_result = None
+        self.critical_value = critical_value
         self.warnings_enabled = warnings_enabled
         self.stationary = None
 
-    def _is_stationary_ADF(self, data, critical_value='5%'):
-        assert (critical_value in ['1%', '5%', '10%'])
+    def _is_stationary_ADF(self, data):
         result = adfuller(data, autolag='AIC')
         teststat = result[0]
-        criticv = result[4][critical_value]
+        criticv = result[4][self.critical_value]
         self._adf_result = result
         if teststat < criticv:
             return True
         else:
             return False
 
-    def _is_stationary_KPSS(self, data, critical_value='5%'):
-        assert (critical_value in ['1%', '5%', '10%'])
+    def _is_stationary_KPSS(self, data):
         result = kpss(data, regression='c')
         teststat = result[0]
-        criticv = result[3][critical_value]
+        criticv = result[3][self.critical_value]
         self._kpss_result = result
         if teststat < criticv:
             return True
         else:
             return False
 
-    def _is_stationary(self, data, critical_value='5%'):
+    def _is_stationary(self, data):
         """Returns whether the data is stationary according to ADF and KPSS.  If one of the two tests fail, returns False"""
-        assert (critical_value in ['1%', '5%', '10%'])
-        res_adf = self._is_stationary_ADF(data, critical_value)
-        res_kpss = self._is_stationary_KPSS(data, critical_value)
+        res_adf = self._is_stationary_ADF(data)
+        res_kpss = self._is_stationary_KPSS(data)
         if res_adf and res_kpss:
             self._stationary = True
             return True
@@ -80,7 +81,7 @@ class AutoStationary:
             self._stationary = False
             return False
 
-    def transform(self, boxcox_transform=True, diff_orders='auto', enforce_stationarity=True, critical_value='5%'):
+    def transform(self, boxcox_transform=True, diff_orders='auto', enforce_stationarity=True):
         """
         If the data is not stationary, returns a stationary version of the data.
         Used techniques are Boxcox transform and differencing.
@@ -100,9 +101,6 @@ class AutoStationary:
                                     If set to False, will return the data with diff_orders[0] differencing.
                                     Note that if this setting is disabled and you have disabled warning messages as well,
                                     the function may return non-stationary data without alerting you.
-
-        critical_value              Required confidence for the ADF and KPSS stationarity tests.
-                                    String.  '1%', 5%' (default) or '10%'.
         """
 
         # input validation
@@ -151,7 +149,7 @@ class AutoStationary:
             datadiff = np.roll(tdata, o)
             datadiff = tdata - datadiff
             datadiff = datadiff[o:]
-            if self._is_stationary(datadiff, critical_value):
+            if self._is_stationary(datadiff):
                 self._diff_order = o
                 self._transformed = True
                 if self._input_was_array:
@@ -251,18 +249,20 @@ class AutoStationary:
 if __name__ == '__main__':
     data = pd.read_csv('../datasets/airpassengers.csv')
     col = '#Passengers'
+
     print(data[col].values)
-    ass = AutoStationary(data[col].values)
-    print(ass._is_stationary_ADF(data[col].values))
-    print(ass._is_stationary_KPSS(data[col].values))
-    diff = ass.transform(boxcox_transform=True, critical_value='5%')
+    ast = AutoStationary(data[col].values)
+    print(ast._is_stationary_ADF(data[col].values))
+    print(ast._is_stationary_KPSS(data[col].values))
+
+    diff = ast.transform(boxcox_transform=True)
     print(diff)
-    print(ass.summary())
-    #print(ass.difference(critical_value='1%'))
-    print(ass._is_stationary_ADF(diff))
-    print(ass._is_stationary_KPSS(diff))
-    print(diff)
-    print(ass.inverse_transform(diff))
+    print(ast.summary())
+    #print(ast.difference(critical_value='1%'))
+    print(ast._is_stationary_ADF(diff))
+    print(ast._is_stationary_KPSS(diff))
+
+    print(ast.inverse_transform(diff))
 
 
     # file = pd.read_csv('datasets/sinewave.csv')['sinewave'].values
@@ -282,12 +282,12 @@ if __name__ == '__main__':
     # print(data.head())
     # print(data.tail())
     # print('-'*10)
-    # ass = AutoStationary(data)
-    # diff = ass.transform(boxcox_transform=True, critical_value='5%')
-    # print(ass.summary())
+    # ast = AutoStationary(data)
+    # diff = ast.transform(boxcox_transform=True)
+    # print(ast.summary())
     # print(diff.head())
     # print(diff.tail())
     # print('-'*10)
-    # inv = ass.inverse_transform(diff)
+    # inv = ast.inverse_transform(diff)
     # print(inv.head())
     # print(inv.tail())
