@@ -43,42 +43,50 @@ class AutoStationary:
         self._diff_order = None
         self._boxcox_lambda = None
         self._boxcox_shift = 0
-        self._stationary = None
         self._transformed = False
-        self._kpss_result = None
+        self.stationary = None
         self.critical_value = critical_value
         self.warnings_enabled = warnings_enabled
-        self.stationary = None
 
-    def _is_stationary_ADF(self, data):
+    def is_stationary_ADF(self, data, return_result=False):
         result = adfuller(data, autolag='AIC')
         teststat = result[0]
         criticv = result[4][self.critical_value]
-        self._adf_result = result
         if teststat < criticv:
-            return True
+            if not return_result:
+                return True
+            else:
+                return True, result
         else:
-            return False
+            if not return_result:
+                return False
+            else:
+                return False, result
 
-    def _is_stationary_KPSS(self, data):
+    def is_stationary_KPSS(self, data, return_result=False):
         result = kpss(data, regression='c')
         teststat = result[0]
         criticv = result[3][self.critical_value]
-        self._kpss_result = result
         if teststat < criticv:
-            return True
+            if not return_result:
+                return True
+            else:
+                return True, result
         else:
-            return False
+            if not return_result:
+                return False
+            else:
+                return False, result
 
-    def _is_stationary(self, data):
+    def is_stationary(self, data):
         """Returns whether the data is stationary according to ADF and KPSS.  If one of the two tests fail, returns False"""
-        res_adf = self._is_stationary_ADF(data)
-        res_kpss = self._is_stationary_KPSS(data)
+        res_adf = self.is_stationary_ADF(data)
+        res_kpss = self.is_stationary_KPSS(data)
         if res_adf and res_kpss:
-            self._stationary = True
+            self.stationary = True
             return True
         else:
-            self._stationary = False
+            self.stationary = False
             return False
 
     def transform(self, boxcox_transform=True, diff_orders='auto', enforce_stationarity=True):
@@ -118,7 +126,7 @@ class AutoStationary:
             return self._data
 
         # if already stationary, do nothing
-        if self._is_stationary(self._data):
+        if self.is_stationary(self._data):
             if self.warnings_enabled:
                 warnings.warn('Data already stationary.  Returning original data.', UserWarning)
             self._transformed = False
@@ -149,7 +157,7 @@ class AutoStationary:
             datadiff = np.roll(tdata, o)
             datadiff = tdata - datadiff
             datadiff = datadiff[o:]
-            if self._is_stationary(datadiff):
+            if self.is_stationary(datadiff):
                 self._diff_order = o
                 self._transformed = True
                 if self._input_was_array:
@@ -157,7 +165,7 @@ class AutoStationary:
                 else:
                     return datadiff
 
-        # if failed to make it stationary
+        # failed to make it stationary
         self.stationary = False
         if enforce_stationarity:
             raise ValueError('Could not make the data stationary with given parameters.')
@@ -235,13 +243,16 @@ class AutoStationary:
         if not self._enabled:
             return {'warning': 'data was not transformed in any way cause user set enabled.'}
         else:
+            _, adf_result = self.is_stationary_ADF(self._data, return_result=True)
+            _, kpss_result = self.is_stationary_KPSS(self._data, return_result=True)
+
             return ({'transformed': self._transformed,
-                    'stationary': self._stationary,
+                    'stationary': self.stationary,
                     'diff_order': self._diff_order,
                     'boxcox_lambda': self._boxcox_lambda,
                     'boxcox_shift': self._boxcox_shift,
-                    'adf_result': pd.Series(self._adf_result[:5], index=['test_statistic', 'p', 'n_lags', 'n_obs', 'critical_value']).to_dict(),
-                    'kpss_result': pd.Series(self._kpss_result[:4], index=['test statistic', 'p', 'n_lags', 'critical_value']).to_dict()
+                    'adf_result': pd.Series(adf_result[:5], index=['test_statistic', 'p', 'n_lags', 'n_obs', 'critical_value']).to_dict(),
+                    'kpss_result': pd.Series(kpss_result[:4], index=['test statistic', 'p', 'n_lags', 'critical_value']).to_dict()
                     })
 
 
@@ -252,15 +263,15 @@ if __name__ == '__main__':
 
     print(data[col].values)
     ast = AutoStationary(data[col].values)
-    print(ast._is_stationary_ADF(data[col].values))
-    print(ast._is_stationary_KPSS(data[col].values))
+    print(ast.is_stationary_ADF(data[col].values))
+    print(ast.is_stationary_KPSS(data[col].values))
 
     diff = ast.transform(boxcox_transform=True)
     print(diff)
     print(ast.summary())
     #print(ast.difference(critical_value='1%'))
-    print(ast._is_stationary_ADF(diff))
-    print(ast._is_stationary_KPSS(diff))
+    print(ast.is_stationary_ADF(diff))
+    print(ast.is_stationary_KPSS(diff))
 
     print(ast.inverse_transform(diff))
 
